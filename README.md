@@ -6,7 +6,7 @@ Local command-line utility for transcribing video files into timestamped text us
 
 - `pyenv` Python `3.11.10`
 - `ffmpeg` installed and available on `PATH`
-- NVIDIA driver and CUDA-compatible environment for RTX 4050 acceleration
+- NVIDIA driver and CUDA-compatible environment, such as an RTX 4050, for acceleration
 
 ## Setup
 
