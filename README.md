@@ -1,19 +1,20 @@
 # cudacaption
 
-Local command-line utility for transcribing video files into timestamped text using Whisper, optimized for NVIDIA CUDA GPUs.
+Local command-line utility for transcribing video files into timestamped text using Whisper.
 
 ## Requirements
 
 - `pyenv` Python `3.11.10`
 - `ffmpeg` installed and available on `PATH`
-- NVIDIA driver and CUDA-compatible environment, such as an RTX 4050, for acceleration
+- Linux CUDA acceleration requires an NVIDIA driver and compatible GPU environment
 
-The project installs CUDA user-space runtime libraries (cuBLAS/cuDNN) via pip so GPU
-inference works without manual system library path setup.
+The project installs CUDA user-space runtime libraries (cuBLAS/cuDNN) on Linux via pip so GPU inference works without manual system library path setup.
+
+On Apple Silicon macOS, CUDA is unavailable and `cudacaption` automatically uses CPU runtime.
 
 ## Tested Stack
 
-This project was validated on the following stack:
+This project was validated on the following Linux stack:
 
 - OS: Linux
 - Python: 3.11.10
@@ -35,6 +36,8 @@ This project was validated on the following stack:
 
 ## Setup
 
+### Apple Silicon macOS (arm64)
+
 ```bash
 pyenv install 3.11.10
 pyenv local 3.11.10
@@ -43,6 +46,33 @@ source .venv/bin/activate
 pip install -U pip
 pip install -r requirements.txt
 ```
+
+Install `ffmpeg` if needed:
+
+```bash
+brew install ffmpeg
+```
+
+Notes:
+
+- Apple Silicon defaults to CPU runtime automatically.
+- Expect slower transcription than Linux with NVIDIA CUDA.
+
+### Linux (CUDA)
+
+```bash
+pyenv install 3.11.10
+pyenv local 3.11.10
+python -m venv .venv
+source .venv/bin/activate
+pip install -U pip
+pip install -r requirements.txt
+```
+
+Notes:
+
+- On Linux, CUDA runtime libraries are installed via pip dependencies.
+- Default runtime is CUDA unless `--cpu` is set.
 
 ## Usage
 
@@ -61,6 +91,8 @@ cudacaption ./myvideo.mp4 --extract-keyframes --keyframe-mode interval --keyfram
 cudacaption ./myvideo.mp4 --extract-keyframes --vision-model microsoft/Florence-2-base --vision-prompt-profile slides
 cudacaption ./myvideo.mp4 --extract-keyframes --vision-model Salesforce/blip-image-captioning-base
 ```
+
+On Apple Silicon, `--cpu` is optional because CPU is already the default runtime.
 
 Keyframe/vision flags:
 
@@ -98,6 +130,26 @@ Notes:
 
 - `microsoft/Florence-2-base` provides richer slide-focused output and OCR-like text extraction.
 - `Salesforce/blip-image-captioning-base` is supported and runs successfully, but captions are generally less precise for dense slide text.
+
+## Smoke Test (Apple Silicon)
+
+After setup, run:
+
+```bash
+cudacaption ~/test.mp4
+```
+
+Expected artifacts (next to input file unless `--output-dir` is set):
+
+- `test.srt`
+- `test.vtt`
+- `test.json`
+- `test.txt`
+
+## Troubleshooting
+
+- `ffmpeg not found`: install with `brew install ffmpeg` and ensure it is on `PATH`.
+- CUDA-related error on macOS: re-run with `--cpu` if a custom environment tried to force CUDA.
 
 ## Git Workflow
 

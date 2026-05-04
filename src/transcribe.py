@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import glob
 import os
+import platform
 import site
 import ctypes
 from dataclasses import dataclass
@@ -18,6 +19,9 @@ class TranscribeConfig:
 
 
 def _ensure_cuda_library_path() -> None:
+    if platform.system() != "Linux":
+        return
+
     site_packages = site.getsitepackages()
     if not site_packages:
         return

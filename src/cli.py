@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import argparse
+import platform
 import shutil
 import sys
 import tempfile
@@ -76,6 +77,21 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
     return parser.parse_args(argv)
 
 
+def resolve_runtime_target(force_cpu: bool) -> tuple[str, str, str | None]:
+    if force_cpu:
+        return "cpu", "int8", None
+
+    is_apple_silicon = platform.system() == "Darwin" and platform.machine() == "arm64"
+    if is_apple_silicon:
+        return (
+            "cpu",
+            "int8",
+            "Apple Silicon detected: CUDA is unavailable on macOS; using CPU runtime.",
+        )
+
+    return "cuda", "float16", None
+
+
 def main(argv: list[str] | None = None) -> int:
     args = parse_args(argv if argv is not None else sys.argv[1:])
     input_path = Path(args.video_path).expanduser().resolve()
@@ -100,11 +116,12 @@ def main(argv: list[str] | None = None) -> int:
     merged_out = output_dir / f"{stem}.timeline.json"
     keyframe_dir_out = output_dir / f"{stem}.keyframes"
 
-    device = "cpu" if args.cpu else "cuda"
-    compute_type = "int8" if args.cpu else "float16"
+    device, compute_type, runtime_note = resolve_runtime_target(args.cpu)
 
     print(f"Input: {input_path}")
     print(f"Device: {device} ({compute_type})")
+    if runtime_note:
+        print(runtime_note)
 
     start = time.perf_counter()
     try:
