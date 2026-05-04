@@ -6,9 +6,9 @@ import tempfile
 import time
 from pathlib import Path
 
-from .media import extract_audio_wav
-from .transcribe import TranscribeConfig, transcribe_file
-from .writers import write_json, write_srt, write_txt, write_vtt
+from media import extract_audio_wav
+from transcribe import TranscribeConfig, transcribe_file
+from writers import write_json, write_srt, write_txt, write_vtt
 
 
 def parse_args(argv: list[str]) -> argparse.Namespace:

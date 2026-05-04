@@ -8,15 +8,14 @@ version = "0.1.0"
 description = "Local GPU-accelerated video transcription CLI using Whisper"
 readme = "README.md"
 requires-python = ">=3.11,<3.12"
+license = {text = "GPL-3.0-only"}
 dependencies = [
   "faster-whisper>=1.0.3",
 ]
 
 [project.scripts]
-cudacaption = "cudacaption.cli:main"
+cudacaption = "cli:main"
 
 [tool.setuptools]
 package-dir = {"" = "src"}
-
-[tool.setuptools.packages.find]
-where = ["src"]
+py-modules = ["cli", "media", "transcribe", "writers"]
