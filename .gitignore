@@ -2,3 +2,12 @@ __pycache__/
 *.py[cod]
 .venv/
 *.egg-info/
+
+# Transcription outputs
+*.json
+*.srt
+*.vtt
+*.txt
+
+# Model/download caches
+.cache/

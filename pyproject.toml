@@ -16,6 +16,13 @@ dependencies = [
   "nvidia-cuda-runtime-cu12>=12.9.79",
 ]
 
+[project.optional-dependencies]
+dev = [
+  "pre-commit>=3.8.0",
+  "ruff>=0.12.0",
+  "detect-secrets>=1.5.0",
+]
+
 [project.scripts]
 cudacaption = "cli:main"
 

@@ -32,7 +32,9 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
         description="Transcribe a video file into timestamped outputs using Whisper.",
     )
     parser.add_argument("video_path", help="Path to input video file")
-    parser.add_argument("--model", default="medium", help="Whisper model (default: medium)")
+    parser.add_argument(
+        "--model", default="medium", help="Whisper model (default: medium)"
+    )
     parser.add_argument("--language", default=None, help="Language hint, e.g. en")
     parser.add_argument(
         "--output-dir",
@@ -61,7 +63,9 @@ def main(argv: list[str] | None = None) -> int:
         return 2
 
     output_dir = (
-        Path(args.output_dir).expanduser().resolve() if args.output_dir else input_path.parent
+        Path(args.output_dir).expanduser().resolve()
+        if args.output_dir
+        else input_path.parent
     )
     output_dir.mkdir(parents=True, exist_ok=True)
 
