@@ -19,6 +19,10 @@ def write_json(segments: list[dict], output_path: Path) -> None:
     output_path.write_text(json.dumps(segments, indent=2), encoding="utf-8")
 
 
+def write_unified_json(payload: dict, output_path: Path) -> None:
+    output_path.write_text(json.dumps(payload, indent=2), encoding="utf-8")
+
+
 def write_txt(segments: list[dict], output_path: Path) -> None:
     lines = [seg["text"].strip() for seg in segments if seg.get("text")]
     output_path.write_text("\n".join(lines) + "\n", encoding="utf-8")

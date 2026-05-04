@@ -4,10 +4,13 @@ __pycache__/
 *.egg-info/
 
 # Transcription outputs
-*.json
 *.srt
 *.vtt
 *.txt
+*.visual.json
+*.timeline.json
+*.keyframes/
+!requirements.txt
 
 # Model/download caches
 .cache/
