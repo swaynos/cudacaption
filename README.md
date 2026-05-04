@@ -8,6 +8,9 @@ Local command-line utility for transcribing video files into timestamped text us
 - `ffmpeg` installed and available on `PATH`
 - NVIDIA driver and CUDA-compatible environment, such as an RTX 4050, for acceleration
 
+The project installs CUDA user-space runtime libraries (cuBLAS/cuDNN) via pip so GPU
+inference works without manual system library path setup.
+
 ## Setup
 
 ```bash

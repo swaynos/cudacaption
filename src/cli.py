@@ -11,6 +11,21 @@ from transcribe import TranscribeConfig, transcribe_file
 from writers import write_json, write_srt, write_txt, write_vtt
 
 
+def format_runtime_error(exc: Exception, device: str) -> str:
+    message = str(exc)
+    if device == "cuda" and (
+        "libcublas" in message.lower()
+        or "cuda" in message.lower()
+        or "cudnn" in message.lower()
+    ):
+        return (
+            "CUDA runtime is unavailable. Install compatible NVIDIA/CUDA libraries "
+            "for ctranslate2, or re-run with --cpu.\n"
+            f"Original error: {message}"
+        )
+    return message
+
+
 def parse_args(argv: list[str]) -> argparse.Namespace:
     parser = argparse.ArgumentParser(
         prog="cudacaption",
@@ -86,7 +101,8 @@ def main(argv: list[str] | None = None) -> int:
         write_vtt(segments, vtt_out)
         write_txt(segments, txt_out)
     except Exception as exc:
-        print(f"Error: transcription failed: {exc}", file=sys.stderr)
+        error_message = format_runtime_error(exc, device)
+        print(f"Error: transcription failed: {error_message}", file=sys.stderr)
         return 1
 
     elapsed = time.perf_counter() - start
