@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from pathlib import Path
+from typing import Callable
 
 
 def analyze_keyframes(
@@ -8,6 +9,7 @@ def analyze_keyframes(
     model_name: str,
     device: str,
     prompt_profile: str,
+    on_frame: Callable[[int, dict], None] | None = None,
 ) -> list[dict]:
     try:
         import torch
@@ -46,7 +48,7 @@ def analyze_keyframes(
         caption_task = "<MORE_DETAILED_CAPTION>"
 
     out: list[dict] = []
-    for item in keyframes:
+    for idx, item in enumerate(keyframes, start=1):
         frame_path = Path(item["frame_path"])
         caption = ""
         ocr_text = ""
@@ -120,13 +122,14 @@ def analyze_keyframes(
             if result and isinstance(result, list):
                 caption = str(result[0].get("generated_text", "")).strip()
 
-        out.append(
-            {
-                "timestamp": float(item["timestamp"]),
-                "frame_path": str(frame_path),
-                "caption": caption,
-                "ocr_text": ocr_text,
-                "tags": [prompt_profile],
-            }
-        )
+        payload = {
+            "timestamp": float(item["timestamp"]),
+            "frame_path": str(frame_path),
+            "caption": caption,
+            "ocr_text": ocr_text,
+            "tags": [prompt_profile],
+        }
+        out.append(payload)
+        if on_frame:
+            on_frame(idx, payload)
     return out

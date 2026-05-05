@@ -84,6 +84,7 @@ Optional flags:
 
 ```bash
 cudacaption ./myvideo.mp4 --model medium --language en --output-dir ./transcripts
+cudacaption ./myvideo.mp4 --english
 cudacaption ./myvideo.mp4 --cpu
 cudacaption ./myvideo.mp4 --word-timestamps
 cudacaption ./myvideo.mp4 --extract-keyframes --keyframe-mode scene --max-keyframes 40
@@ -103,6 +104,32 @@ Keyframe/vision flags:
 - `--max-keyframes` cap number of processed frames
 - `--vision-model` optional image-to-text model name
 - `--vision-prompt-profile` `slides`, `meeting`, or `code-demo`
+
+Transcription language controls:
+
+- `--language en` force Whisper to decode as English
+- `--english` shorthand for `--language en`
+
+If transcripts look like the wrong language, use `--english` (or `--language en`) explicitly.
+
+## Language Detection Note
+
+During validation, we observed a failure mode where Whisper auto language detection
+can occasionally drift and produce transcript text in the wrong language on some
+recordings.
+
+Recommended workflow:
+
+1. First run with defaults.
+2. If transcript language looks wrong, rerun with forced English.
+
+Recommended for English Zoom/presentation recordings (run-and-forget):
+
+```bash
+cudacaption ./myvideo.mp4 --english
+```
+
+If auto-detect output looks wrong-language or garbled, rerun with `--english`.
 
 ## Output
 

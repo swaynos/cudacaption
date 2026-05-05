@@ -35,4 +35,4 @@ cudacaption = "cli:main"
 
 [tool.setuptools]
 package-dir = {"" = "src"}
-py-modules = ["cli", "media", "transcribe", "writers", "keyframes", "vision"]
+py-modules = ["cli", "media", "transcribe", "writers", "keyframes", "vision", "runtime_monitor"]

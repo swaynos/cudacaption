@@ -10,7 +10,8 @@ from pathlib import Path
 
 from media import extract_audio_wav
 from keyframes import extract_keyframes
-from transcribe import TranscribeConfig, transcribe_file
+from runtime_monitor import cleanup_cuda, log_vram, phase_marker
+from transcribe import TranscribeConfig, transcribe_file_with_progress
 from writers import write_json, write_srt, write_txt, write_unified_json, write_vtt
 from vision import analyze_keyframes
 
@@ -40,6 +41,11 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
         "--model", default="medium", help="Whisper model (default: medium)"
     )
     parser.add_argument("--language", default=None, help="Language hint, e.g. en")
+    parser.add_argument(
+        "--english",
+        action="store_true",
+        help="Force Whisper language to English (equivalent to --language en)",
+    )
     parser.add_argument(
         "--output-dir",
         default=None,
@@ -74,7 +80,51 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
         default="slides",
         choices=["slides", "meeting", "code-demo"],
     )
+    parser.add_argument("--sanity-segments", type=int, default=5)
+    parser.add_argument("--sanity-window-sec", type=float, default=30.0)
+    parser.add_argument("--progress-every-segments", type=int, default=10)
+    parser.add_argument("--progress-every-frames", type=int, default=5)
     return parser.parse_args(argv)
+
+
+def _looks_like_garbage(text: str) -> bool:
+    cleaned = text.strip()
+    if not cleaned:
+        return True
+    letters = sum(ch.isalpha() for ch in cleaned)
+    ratio = letters / max(1, len(cleaned))
+    return ratio < 0.45
+
+
+def _validate_early_transcript(
+    segments: list[dict], sanity_segments: int, sanity_window_sec: float
+) -> None:
+    early = segments[:sanity_segments]
+    if not early:
+        raise RuntimeError("transcription quality check failed: no segments generated")
+    joined = " ".join(str(s.get("text", "")) for s in early).strip()
+    if len(joined) < 16:
+        raise RuntimeError("transcription quality check failed: early transcript too short")
+    if _looks_like_garbage(joined):
+        raise RuntimeError(
+            "transcription quality check failed: early transcript appears low quality/garbled"
+        )
+    if float(early[0].get("start", 0.0)) > sanity_window_sec:
+        print(
+            "Warning: first detected speech starts after sanity window; "
+            "skipping strict first-30s content expectation."
+        )
+
+
+def _validate_early_captions(visual_events: list[dict], count: int = 5) -> None:
+    if not visual_events:
+        raise RuntimeError("vision caption generation failed: no visual events generated")
+    early = visual_events[:count]
+    empties = [idx for idx, v in enumerate(early, start=1) if not str(v.get("caption", "")).strip()]
+    if empties:
+        raise RuntimeError(
+            f"vision caption generation failed: empty caption(s) in first keyframes at positions {empties}"
+        )
 
 
 def resolve_runtime_target(force_cpu: bool) -> tuple[str, str, str | None]:
@@ -94,6 +144,8 @@ def resolve_runtime_target(force_cpu: bool) -> tuple[str, str, str | None]:
 
 def main(argv: list[str] | None = None) -> int:
     args = parse_args(argv if argv is not None else sys.argv[1:])
+    if args.english:
+        args.language = "en"
     input_path = Path(args.video_path).expanduser().resolve()
 
     if not input_path.exists() or not input_path.is_file():
@@ -127,11 +179,34 @@ def main(argv: list[str] | None = None) -> int:
     try:
         with tempfile.TemporaryDirectory(prefix="cudacaption_") as tmpdir:
             wav_path = Path(tmpdir) / f"{stem}.wav"
+            phase_marker("audio_extract")
             print("Extracting audio with ffmpeg...")
             extract_audio_wav(input_path, wav_path)
 
+            phase_marker("transcribe")
             print(f"Transcribing with model '{args.model}'...")
-            segments = transcribe_file(
+            early_segments: list[dict] = []
+            early_checked = False
+
+            def on_segment(idx: int, item: dict) -> None:
+                nonlocal early_checked
+                if not early_checked and idx <= max(1, args.sanity_segments):
+                    early_segments.append(item)
+                    if idx == max(1, args.sanity_segments):
+                        _validate_early_transcript(
+                            early_segments,
+                            sanity_segments=max(1, args.sanity_segments),
+                            sanity_window_sec=max(5.0, args.sanity_window_sec),
+                        )
+                        early_checked = True
+                        print("Transcription sanity check passed.")
+                if idx % max(1, args.progress_every_segments) == 0:
+                    print(
+                        f"Transcribe progress: segments={idx} t={item['end']:.2f}s"
+                    )
+                    log_vram(f"transcribe_progress_{idx}")
+
+            segments = transcribe_file_with_progress(
                 wav_path,
                 TranscribeConfig(
                     model_name=args.model,
@@ -140,10 +215,21 @@ def main(argv: list[str] | None = None) -> int:
                     compute_type=compute_type,
                     word_timestamps=args.word_timestamps,
                 ),
+                on_segment=on_segment,
             )
+            if not early_checked:
+                _validate_early_transcript(
+                    early_segments or segments[: max(1, args.sanity_segments)],
+                    sanity_segments=max(1, args.sanity_segments),
+                    sanity_window_sec=max(5.0, args.sanity_window_sec),
+                )
+
+            phase_marker("unload_transcribe_model")
+            cleanup_cuda("post_transcribe_pre_vision")
 
             visual_events: list[dict] = []
             if args.extract_keyframes:
+                phase_marker("keyframe_extract")
                 frames_dir = Path(tmpdir) / "keyframes"
                 print("Extracting keyframes...")
                 keyframes = extract_keyframes(
@@ -164,17 +250,33 @@ def main(argv: list[str] | None = None) -> int:
                         {"timestamp": float(frame["timestamp"]), "frame_path": str(dst)}
                     )
                 keyframes = persisted_keyframes
+                if not args.vision_model:
+                    args.vision_model = "microsoft/Florence-2-base"
+                    print(
+                        "No vision model provided; defaulting to microsoft/Florence-2-base."
+                    )
                 if args.vision_model and keyframes:
+                    phase_marker("vision_caption")
                     print(f"Analyzing keyframes with model '{args.vision_model}'...")
+                    def on_frame(idx: int, payload: dict) -> None:
+                        if idx % max(1, args.progress_every_frames) == 0:
+                            print(
+                                f"Vision progress: frames={idx} t={float(payload.get('timestamp', 0.0)):.2f}s"
+                            )
+                            log_vram(f"vision_progress_{idx}")
+
                     visual_events = analyze_keyframes(
                         keyframes,
                         model_name=args.vision_model,
                         device=device,
                         prompt_profile=args.vision_prompt_profile,
+                        on_frame=on_frame,
                     )
+                    _validate_early_captions(visual_events, count=5)
                 else:
                     visual_events = keyframes
 
+        phase_marker("finalize_outputs")
         write_json(segments, json_out)
         write_srt(segments, srt_out)
         write_vtt(segments, vtt_out)
@@ -205,6 +307,7 @@ def main(argv: list[str] | None = None) -> int:
                 },
                 merged_out,
             )
+        cleanup_cuda("finalize")
     except Exception as exc:
         error_message = format_runtime_error(exc, device)
         print(f"Error: transcription failed: {error_message}", file=sys.stderr)

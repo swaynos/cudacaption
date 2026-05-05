@@ -7,6 +7,7 @@ import site
 import ctypes
 from dataclasses import dataclass
 from pathlib import Path
+from typing import Callable
 
 
 @dataclass
@@ -70,3 +71,40 @@ def transcribe_file(audio_path: Path, config: TranscribeConfig) -> list[dict]:
             }
         )
     return out
+
+
+def transcribe_file_with_progress(
+    audio_path: Path,
+    config: TranscribeConfig,
+    on_segment: Callable[[int, dict], None] | None = None,
+) -> list[dict]:
+    if config.device == "cuda":
+        _ensure_cuda_library_path()
+
+    from faster_whisper import WhisperModel
+
+    model = WhisperModel(
+        config.model_name,
+        device=config.device,
+        compute_type=config.compute_type,
+    )
+
+    segments, _ = model.transcribe(
+        str(audio_path),
+        language=config.language,
+        word_timestamps=config.word_timestamps,
+    )
+
+    out: list[dict] = []
+    for idx, seg in enumerate(segments, start=1):
+        item = {
+            "start": float(seg.start),
+            "end": float(seg.end),
+            "text": seg.text.strip(),
+        }
+        out.append(item)
+        if on_segment:
+            on_segment(idx, item)
+
+    return out
+
